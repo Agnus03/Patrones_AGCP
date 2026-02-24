@@ -58,6 +58,16 @@ El sistema se estructura en cuatro módulos principales:
 
 ---
 
+## 🔐 Seguridad y Control de Acceso
+
+El sistema contempla un esquema básico de seguridad basado en roles, con el fin de proteger la información y garantizar que cada usuario acceda únicamente a las funciones correspondientes a su perfil.
+
+Se definirán distintos roles (administrador, operador logístico, planificador, proveedor, responsable de calidad), cada uno con permisos específicos sobre los módulos del sistema.
+
+Además, se implementarán mecanismos de autenticación, autorización y registro de eventos relevantes, así como validaciones sobre los datos recibidos desde dispositivos IoT.
+
+---
+
 ## 👥 Casos de Uso Principales
 
 * Un operador logístico consulta el recorrido de un lote y verifica en qué etapa de la cadena se encuentra cada producto.
