@@ -1,0 +1,22 @@
+spring:
+  # DESACTIVAR Flyway TOTALMENTE
+  flyway:
+    enabled: false
+  datasource:
+    url: jdbc:postgresql://localhost:5432/patronesiot
+    username: postgres
+    password: pos
+  jpa:
+    hibernate:
+      ddl-auto: create-drop  # JPA crea tablas SOLO
+    show-sql: true
+    properties:
+      hibernate:
+        ddl-auto: create-drop
+      show-sql: true
+    autoconfigure:
+      exclude:
+        org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration
+
+server:
+  port: 8080
