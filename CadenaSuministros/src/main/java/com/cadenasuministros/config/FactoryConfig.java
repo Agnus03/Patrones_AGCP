@@ -11,26 +11,34 @@ import com.cadenasuministros.domain.port.out.*;
 public class FactoryConfig {
 
     @Bean
-    TrackShipmentUseCase trackShipmentUseCase(
-            TrackShipmentUseCaseFactory factory) {
-        return factory.createUseCase();
-    }
-
-    @Bean
     TrackShipmentUseCaseFactory trackShipmentUseCaseFactory(
             ShipmentRepository shipmentRepository) {
         return new TrackShipmentServiceFactory(shipmentRepository);
     }
 
     @Bean
-    RegisterSensorReadingUseCase registerSensorReadingUseCase(
-            RegisterSensorReadingUseCaseFactory factory) {
-        return factory.createUseCase();
-    }
-
-    @Bean
     RegisterSensorReadingUseCaseFactory registerSensorReadingUseCaseFactory(
             SensorReadingRepository sensorReadingRepository) {
         return new RegisterSensorReadingServiceFactory(sensorReadingRepository);
+    }
+
+    @Bean
+    SupplyChainUseCaseAbstractFactory supplyChainUseCaseAbstractFactory(
+            TrackShipmentUseCaseFactory trackFactory,
+            RegisterSensorReadingUseCaseFactory sensorFactory) {
+
+        return new DefaultSupplyChainUseCaseFactory(trackFactory, sensorFactory);
+    }
+
+    @Bean
+    TrackShipmentUseCase trackShipmentUseCase(
+            SupplyChainUseCaseAbstractFactory factory) {
+        return factory.createTrackShipmentUseCase();
+    }
+
+    @Bean
+    RegisterSensorReadingUseCase registerSensorReadingUseCase(
+            SupplyChainUseCaseAbstractFactory factory) {
+        return factory.createRegisterSensorReadingUseCase();
     }
 }

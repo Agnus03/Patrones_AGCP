@@ -8,11 +8,9 @@ spring:
     password: pos
   jpa:
     hibernate:
-      ddl-auto: create-drop  # JPA crea tablas SOLO
+      ddl-auto: update  # JPA crea tablas SOLO
     show-sql: true
     properties:
-      hibernate:
-        ddl-auto: create-drop
       show-sql: true
     autoconfigure:
       exclude:
