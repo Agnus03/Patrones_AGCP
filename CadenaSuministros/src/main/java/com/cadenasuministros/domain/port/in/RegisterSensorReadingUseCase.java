@@ -6,6 +6,5 @@ import com.cadenasuministros.domain.model.SensorReading;
 
 public interface RegisterSensorReadingUseCase {
     SensorReading register(SensorReading reading);
-
 	List<SensorReading> listAll();
 }
