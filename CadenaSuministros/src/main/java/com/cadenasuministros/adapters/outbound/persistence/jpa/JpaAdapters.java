@@ -2,7 +2,9 @@ package com.cadenasuministros.adapters.outbound.persistence.jpa;
 
 import org.springframework.stereotype.Component;
 import com.cadenasuministros.domain.model.Shipment;
+import com.cadenasuministros.domain.model.DeliveryReport;
 import com.cadenasuministros.domain.model.SensorReading;
+import com.cadenasuministros.domain.port.out.DeliveryReportRepository;
 import com.cadenasuministros.domain.port.out.SensorReadingRepository;
 import com.cadenasuministros.domain.port.out.ShipmentRepository;
 
@@ -12,15 +14,26 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
-public class JpaAdapters implements ShipmentRepository, SensorReadingRepository {
+public class JpaAdapters implements ShipmentRepository, SensorReadingRepository, DeliveryReportRepository {
 
     private final SpringDataShipmentRepository shipmentRepo;
     private final SpringDataSensorReadingRepository sensorRepo;
-
+    private final SpringDataDeliveryReportRepository deliveryReportRepo;
+    
     public JpaAdapters(SpringDataShipmentRepository shipmentRepo,
-                       SpringDataSensorReadingRepository sensorRepo) {
+                       SpringDataSensorReadingRepository sensorRepo,
+                       SpringDataDeliveryReportRepository deliveryReportRepo) {
         this.shipmentRepo = shipmentRepo;
         this.sensorRepo = sensorRepo;
+        this.deliveryReportRepo = deliveryReportRepo;
+
+    }
+    
+    @Override
+    public DeliveryReport save(DeliveryReport report) {
+        DeliveryReportJpaEntity e = toEntity(report);
+        DeliveryReportJpaEntity saved = deliveryReportRepo.save(e);
+        return toDomain(saved);
     }
 
     @Override
@@ -78,5 +91,46 @@ public class JpaAdapters implements ShipmentRepository, SensorReadingRepository 
             .map(this::toDomain)              // ← Convertir a Domain
             .collect(Collectors.toList());
     }
+    
+    private DeliveryReport toDomain(DeliveryReportJpaEntity e) {
+        return new DeliveryReport.Builder()
+            .reportId(e.getReportId())
+            .shipmentId(e.getShipmentId())
+            .productId(e.getProductId())
+            .origin(e.getOrigin())
+            .destination(e.getDestination())
+            .dispatchTime(e.getDispatchTime())
+            .deliveryTime(e.getDeliveryTime())
+            .averageTemperature(e.getAverageTemperature())
+            .averageHumidity(e.getAverageHumidity())
+            .temperatureAlert(e.getTemperatureAlert())
+            .humidityAlert(e.getHumidityAlert())
+            .deliveryStatus(e.getDeliveryStatus())
+            .observations(e.getObservations())
+            .build();
+    }
 
+    private DeliveryReportJpaEntity toEntity(DeliveryReport d) {
+        DeliveryReportJpaEntity e = new DeliveryReportJpaEntity();
+        e.setReportId(d.getReportId());
+        e.setShipmentId(d.getShipmentId());
+        e.setProductId(d.getProductId());
+        e.setOrigin(d.getOrigin());
+        e.setDestination(d.getDestination());
+        e.setDispatchTime(d.getDispatchTime());
+        e.setDeliveryTime(d.getDeliveryTime());
+        e.setAverageTemperature(d.getAverageTemperature());
+        e.setAverageHumidity(d.getAverageHumidity());
+        e.setTemperatureAlert(d.getTemperatureAlert());
+        e.setHumidityAlert(d.getHumidityAlert());
+        e.setDeliveryStatus(d.getDeliveryStatus());
+        e.setObservations(d.getObservations());
+        return e;
+    }
+
+	@Override
+	public List<SensorReading> findByShipmentId(UUID shipmentId) {
+		// TODO Auto-generated method stub
+		return null;
+	}
 }

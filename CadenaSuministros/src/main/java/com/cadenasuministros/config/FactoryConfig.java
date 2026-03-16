@@ -3,9 +3,14 @@ package com.cadenasuministros.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.cadenasuministros.adapters.outbound.persistence.jpa.JpaAdapters;
+import com.cadenasuministros.adapters.outbound.persistence.jpa.SpringDataDeliveryReportRepository;
+import com.cadenasuministros.adapters.outbound.persistence.jpa.SpringDataSensorReadingRepository;
+import com.cadenasuministros.adapters.outbound.persistence.jpa.SpringDataShipmentRepository;
 import com.cadenasuministros.application.factory.*;
 import com.cadenasuministros.domain.port.in.*;
 import com.cadenasuministros.domain.port.out.*;
+import com.cadenasuministros.domain.service.GenerateDeliveryReportService;
 
 @Configuration
 public class FactoryConfig {
@@ -40,5 +45,25 @@ public class FactoryConfig {
     RegisterSensorReadingUseCase registerSensorReadingUseCase(
             SupplyChainUseCaseAbstractFactory factory) {
         return factory.createRegisterSensorReadingUseCase();
+    }
+    
+    @Bean
+    JpaAdapters jpaAdapters(
+            SpringDataShipmentRepository shipmentRepo,
+            SpringDataSensorReadingRepository sensorRepo,
+            SpringDataDeliveryReportRepository reportRepo) {  // ⭐ NUEVO
+        return new JpaAdapters(shipmentRepo, sensorRepo, reportRepo);
+    }
+    
+    @Bean
+    GenerateDeliveryReportUseCase generateDeliveryReportUseCase(
+            ShipmentRepository shipmentRepository,
+            SensorReadingRepository sensorReadingRepository,
+            DeliveryReportRepository deliveryReportRepository) {
+        return new GenerateDeliveryReportService(
+            shipmentRepository, 
+            sensorReadingRepository, 
+            deliveryReportRepository
+        );
     }
 }
