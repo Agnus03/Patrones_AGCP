@@ -20,4 +20,5 @@ public class ShipmentController {
     public Shipment getById(@PathVariable UUID id) {
         return trackShipmentUseCase.getById(id);
     }
+       
 }
