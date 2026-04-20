@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "gof-design-patterns": {
+      "source": "markpitt/claude-skills",
+      "sourceType": "github",
+      "computedHash": "746cdade0ce1fa6b5a16573cd801423825035e50516ec8c4c68f8aaff3b38bd9"
+    }
+  }
+}
