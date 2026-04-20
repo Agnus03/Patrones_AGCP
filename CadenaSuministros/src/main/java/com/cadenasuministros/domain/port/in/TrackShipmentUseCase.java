@@ -6,4 +6,5 @@ import java.util.UUID;
 
 public interface TrackShipmentUseCase {
     Shipment getById(UUID shipmentId);
+    Shipment create(Shipment shipment);
 }

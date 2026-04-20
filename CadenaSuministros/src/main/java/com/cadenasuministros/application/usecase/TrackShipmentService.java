@@ -20,4 +20,9 @@ public class TrackShipmentService implements TrackShipmentUseCase {
         return shipmentRepository.findById(shipmentId)
                 .orElseThrow(() -> new IllegalArgumentException("Shipment not found: " + shipmentId));
     }
+
+    @Override
+    public Shipment create(Shipment shipment) {
+        return shipmentRepository.save(shipment);
+    }
 }
