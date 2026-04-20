@@ -164,7 +164,7 @@ public class SupplyChainFacadeImpl implements SupplyChainFacade {
                 .orElse(0);
 
         SensorReading last = readings.get(readings.size() - 1);
-        boolean withinRange = isAlertCondition(last.temperatureC(), last.humidityPct());
+        boolean withinRange = !isAlertCondition(last.temperatureC(), last.humidityPct());
 
         return new Dashboard.SensorStats(
                 readings.size(),
