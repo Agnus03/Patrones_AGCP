@@ -1,10 +1,8 @@
 package com.cadenasuministros.domain.port.out.proxy;
 
-import com.cadenasuministros.domain.model.SensorReading;
 import com.cadenasuministros.domain.model.Shipment;
 import com.cadenasuministros.domain.port.out.ShipmentRepository;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,7 +13,7 @@ public class ShipmentCacheProxy implements ShipmentRepository {
 
     private final ShipmentRepository realRepository;
     private final Map<UUID, CachedEntry<Shipment>> findByIdCache = new ConcurrentHashMap<>();
-    private final Map<UUID, CachedEntry<List<SensorReading>>> listAllCache = new ConcurrentHashMap<>();
+    private final Map<UUID, CachedEntry<List<Shipment>>> listAllShipmentsCache = new ConcurrentHashMap<>();
     private final long cacheTtlMillis;
 
     public ShipmentCacheProxy(ShipmentRepository realRepository, long cacheTtlMillis) {
@@ -30,13 +28,13 @@ public class ShipmentCacheProxy implements ShipmentRepository {
     private static final UUID GLOBAL_KEY = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
     @Override
-    public Optional<Shipment> findById(UUID id) {
+    public Optional<Shipment> findShipmentById(UUID id) {
         CachedEntry<Shipment> entry = findByIdCache.get(id);
         if (entry != null && !entry.isExpired()) {
             return Optional.of(entry.getValue());
         }
 
-        Optional<Shipment> result = realRepository.findById(id);
+        Optional<Shipment> result = realRepository.findShipmentById(id);
         result.ifPresent(shipment -> 
             findByIdCache.put(id, new CachedEntry<>(shipment, cacheTtlMillis))
         );
@@ -50,20 +48,20 @@ public class ShipmentCacheProxy implements ShipmentRepository {
     }
 
     @Override
-    public List<SensorReading> listAll() {
-        CachedEntry<List<SensorReading>> entry = listAllCache.get(GLOBAL_KEY);
+    public List<Shipment> listAllShipments() {
+        CachedEntry<List<Shipment>> entry = listAllShipmentsCache.get(GLOBAL_KEY);
         if (entry != null && !entry.isExpired()) {
             return entry.getValue();
         }
 
-        List<SensorReading> result = realRepository.listAll();
-        listAllCache.put(GLOBAL_KEY, new CachedEntry<>(result, cacheTtlMillis));
+        List<Shipment> result = realRepository.listAllShipments();
+        listAllShipmentsCache.put(GLOBAL_KEY, new CachedEntry<>(result, cacheTtlMillis));
         return result;
     }
 
     private void invalidateAllCaches() {
         findByIdCache.clear();
-        listAllCache.clear();
+        listAllShipmentsCache.clear();
     }
 
     public void clearCache() {
@@ -72,18 +70,18 @@ public class ShipmentCacheProxy implements ShipmentRepository {
 
     public int getCacheSize() {
         findByIdCache.entrySet().removeIf(e -> e.getValue().isExpired());
-        listAllCache.entrySet().removeIf(e -> e.getValue().isExpired());
+        listAllShipmentsCache.entrySet().removeIf(e -> e.getValue().isExpired());
         
-        return findByIdCache.size() + listAllCache.size();
+        return findByIdCache.size() + listAllShipmentsCache.size();
     }
 
     private static class CachedEntry<T> {
         private final T value;
-        private final Instant expiresAt;
+        private final long expiresAtMillis;
 
         CachedEntry(T value, long ttlMillis) {
             this.value = value;
-            this.expiresAt = Instant.now().plusMillis(ttlMillis);
+            this.expiresAtMillis = System.currentTimeMillis() + ttlMillis;
         }
 
         T getValue() {
@@ -91,7 +89,7 @@ public class ShipmentCacheProxy implements ShipmentRepository {
         }
 
         boolean isExpired() {
-            return Instant.now().isAfter(expiresAt);
+            return System.currentTimeMillis() > expiresAtMillis;
         }
     }
 }

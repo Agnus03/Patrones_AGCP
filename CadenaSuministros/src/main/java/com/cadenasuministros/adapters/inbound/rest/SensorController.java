@@ -29,6 +29,11 @@ public class SensorController {
 
     @PostMapping("/readings")
     public SensorReading create(@RequestBody @Valid SensorReadingRequest req) {
+        // Validar que shipmentId no sea null
+        if (req.shipmentId() == null || req.shipmentId().toString().isEmpty()) {
+            throw new IllegalArgumentException("El shipmentId es requerido");
+        }
+        
         SensorReading reading = new SensorReading(
                 UUID.randomUUID(),
                 req.shipmentId(),

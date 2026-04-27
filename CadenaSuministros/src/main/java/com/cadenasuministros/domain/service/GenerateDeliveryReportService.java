@@ -29,10 +29,15 @@ public class GenerateDeliveryReportService implements GenerateDeliveryReportUseC
 
     @Override
     public DeliveryReport generate(UUID shipmentId) {
-        Shipment shipment = shipmentRepository.findById(shipmentId)
+        Shipment shipment = shipmentRepository.findShipmentById(shipmentId)
                 .orElseThrow(() -> new IllegalArgumentException("Shipment no encontrado: " + shipmentId));
 
         List<SensorReading> readings = sensorReadingRepository.findByShipmentId(shipmentId);
+        
+        // Si no hay lecturas, usar valores por defecto
+        if (readings == null || readings.isEmpty()) {
+            System.out.println("No se encontraron lecturas para shipment: " + shipmentId);
+        }
 
         DoubleSummaryStatistics tempStats = readings.stream()
                 .filter(r -> r.temperatureC() != null)
@@ -44,33 +49,33 @@ public class GenerateDeliveryReportService implements GenerateDeliveryReportUseC
                 .mapToDouble(SensorReading::humidityPct)
                 .summaryStatistics();
 
-        Double avgTemp = tempStats.getCount() > 0 ? tempStats.getAverage() : null;
-        Double avgHum  = humStats.getCount()  > 0 ? humStats.getAverage()  : null;
+        Double avgTemp = tempStats.getCount() > 0 ? tempStats.getAverage() : 0.0;
+        Double avgHum  = humStats.getCount()  > 0 ? humStats.getAverage()  : 0.0;
 
-        boolean tempAlert = avgTemp != null && (avgTemp < 2 || avgTemp > 8);
-        boolean humAlert  = avgHum  != null && (avgHum  < 40 || avgHum  > 80);
+        boolean tempAlert = avgTemp != 0.0 && (avgTemp < 2 || avgTemp > 30);
+        boolean humAlert  = avgHum  != 0.0 && (avgHum  < 30 || avgHum  > 80);
 
-        // Aquí usas TU Builder
         DeliveryReport report = new DeliveryReport.Builder()
                 .reportId(UUID.randomUUID())
                 .shipmentId(shipment.id())
-                .productId(shipment.productId())
-                .origin("Bodega origen")              // puedes mapear desde shipment si tienes
+                .productId(shipment.productId()) // Obtener productId del shipment
+                .origin("Bodega origen")
                 .destination(shipment.currentLocation())
-                .dispatchTime(shipment.updatedAt())   // o un campo específico
+                .dispatchTime(shipment.updatedAt())
                 .deliveryTime(Instant.now())
                 .averageTemperature(avgTemp)
                 .averageHumidity(avgHum)
                 .temperatureAlert(tempAlert)
                 .humidityAlert(humAlert)
                 .deliveryStatus(shipment.status())
-                .observations(buildObservations(tempAlert, humAlert))
+                .observations(buildObservations(tempAlert, humAlert, readings.isEmpty()))
                 .build();
 
         return deliveryReportRepository.save(report);
     }
 
-    private String buildObservations(boolean tempAlert, boolean humAlert) {
+    private String buildObservations(boolean tempAlert, boolean humAlert, boolean noReadings) {
+        if (noReadings) return "No hay lecturas de sensores registradas";
         if (tempAlert && humAlert) return "Alerta de temperatura y humedad";
         if (tempAlert) return "Alerta de temperatura";
         if (humAlert) return "Alerta de humedad";
@@ -79,7 +84,6 @@ public class GenerateDeliveryReportService implements GenerateDeliveryReportUseC
 
 	@Override
 	public List<SensorReading> listAll() {
-		// TODO Auto-generated method stub
-		return null;
+		return sensorReadingRepository.listAll();
 	}
 }
