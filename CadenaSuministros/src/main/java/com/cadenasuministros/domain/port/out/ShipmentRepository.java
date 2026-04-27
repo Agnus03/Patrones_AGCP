@@ -8,7 +8,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface ShipmentRepository {
-    Optional<Shipment> findById(UUID id);
+    Optional<Shipment> findShipmentById(UUID id);
     Shipment save(Shipment shipment);
-    List<SensorReading> listAll();
+    List<Shipment> listAllShipments();
 }

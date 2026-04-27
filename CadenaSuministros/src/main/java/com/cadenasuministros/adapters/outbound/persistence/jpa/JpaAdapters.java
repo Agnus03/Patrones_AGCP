@@ -4,9 +4,11 @@ import org.springframework.stereotype.Component;
 import com.cadenasuministros.domain.model.Shipment;
 import com.cadenasuministros.domain.model.DeliveryReport;
 import com.cadenasuministros.domain.model.SensorReading;
+import com.cadenasuministros.domain.model.Product;
 import com.cadenasuministros.domain.port.out.DeliveryReportRepository;
 import com.cadenasuministros.domain.port.out.SensorReadingRepository;
 import com.cadenasuministros.domain.port.out.ShipmentRepository;
+import com.cadenasuministros.domain.port.out.ProductRepository;
 
 import java.util.List;
 import java.util.Optional;
@@ -14,19 +16,21 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
-public class JpaAdapters implements ShipmentRepository, SensorReadingRepository, DeliveryReportRepository {
+public class JpaAdapters implements ShipmentRepository, SensorReadingRepository, DeliveryReportRepository, ProductRepository {
 
     private final SpringDataShipmentRepository shipmentRepo;
     private final SpringDataSensorReadingRepository sensorRepo;
     private final SpringDataDeliveryReportRepository deliveryReportRepo;
+    private final SpringDataProductRepository productRepo;
     
     public JpaAdapters(SpringDataShipmentRepository shipmentRepo,
                        SpringDataSensorReadingRepository sensorRepo,
-                       SpringDataDeliveryReportRepository deliveryReportRepo) {
+                       SpringDataDeliveryReportRepository deliveryReportRepo,
+                       SpringDataProductRepository productRepo) {
         this.shipmentRepo = shipmentRepo;
         this.sensorRepo = sensorRepo;
         this.deliveryReportRepo = deliveryReportRepo;
-
+        this.productRepo = productRepo;
     }
     
     @Override
@@ -37,7 +41,7 @@ public class JpaAdapters implements ShipmentRepository, SensorReadingRepository,
     }
 
     @Override
-    public Optional<Shipment> findById(UUID id) {
+    public Optional<Shipment> findShipmentById(UUID id) {
         return shipmentRepo.findById(id).map(this::toDomain);
     }
 
@@ -50,6 +54,9 @@ public class JpaAdapters implements ShipmentRepository, SensorReadingRepository,
 
     @Override
     public SensorReading save(SensorReading reading) {
+        if (reading.shipmentId() == null) {
+            throw new IllegalArgumentException("No se puede guardar lectura sin shipmentId");
+        }
         SensorReadingJpaEntity e = toEntity(reading);
         SensorReadingJpaEntity saved = sensorRepo.save(e);
         return toDomain(saved);
@@ -87,8 +94,8 @@ public class JpaAdapters implements ShipmentRepository, SensorReadingRepository,
 
     @Override
     public List<SensorReading> listAll() {
-        return sensorRepo.findAll().stream()  // JpaEntities
-            .map(this::toDomain)              // ← Convertir a Domain
+        return sensorRepo.findAll().stream()
+            .map(this::toDomain)
             .collect(Collectors.toList());
     }
     
@@ -128,9 +135,51 @@ public class JpaAdapters implements ShipmentRepository, SensorReadingRepository,
         return e;
     }
 
-	@Override
-	public List<SensorReading> findByShipmentId(UUID shipmentId) {
-		// TODO Auto-generated method stub
-		return null;
-	}
+    @Override
+    public List<SensorReading> findByShipmentId(UUID shipmentId) {
+        System.out.println("JpaAdapters.findByShipmentId called with: " + shipmentId);
+        List<SensorReading> result = sensorRepo.findByShipmentId(shipmentId).stream()
+                .map(this::toDomain)
+                .collect(Collectors.toList());
+        System.out.println("Found " + result.size() + " readings");
+        return result;
+    }
+
+    @Override
+    public List<Shipment> listAllShipments() {
+        return shipmentRepo.findAll().stream()
+            .map(this::toDomain)
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    public Optional<Product> findProductById(UUID id) {
+        return productRepo.findById(id).map(this::toDomainProduct);
+    }
+
+    @Override
+    public List<Product> listAllProducts() {
+        return productRepo.findAll().stream()
+            .map(this::toDomainProduct)
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    public Product save(Product product) {
+        ProductJpaEntity e = toEntityProduct(product);
+        ProductJpaEntity saved = productRepo.save(e);
+        return toDomainProduct(saved);
+    }
+
+    private Product toDomainProduct(ProductJpaEntity e) {
+        return new Product(e.id, e.sku, e.name);
+    }
+
+    private ProductJpaEntity toEntityProduct(Product d) {
+        ProductJpaEntity e = new ProductJpaEntity();
+        e.id = d.id();
+        e.sku = d.sku();
+        e.name = d.name();
+        return e;
+    }
 }

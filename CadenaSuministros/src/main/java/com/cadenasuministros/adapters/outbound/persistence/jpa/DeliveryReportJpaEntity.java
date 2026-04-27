@@ -15,13 +15,13 @@ public class DeliveryReportJpaEntity {
     @Column(name = "shipment_id", nullable = false)
     private UUID shipmentId;
 
-    @Column(name = "product_id", nullable = false)
+    @Column(name = "product_id")
     private UUID productId;
 
-    @Column(nullable = false)
+    @Column
     private String origin;
 
-    @Column(nullable = false)
+    @Column
     private String destination;
 
     @Column(name = "dispatch_time")
@@ -42,7 +42,7 @@ public class DeliveryReportJpaEntity {
     @Column(name = "humidity_alert")
     private Boolean humidityAlert;
 
-    @Column(name = "delivery_status", nullable = false)
+    @Column
     private String deliveryStatus;
 
     @Column(columnDefinition = "TEXT")

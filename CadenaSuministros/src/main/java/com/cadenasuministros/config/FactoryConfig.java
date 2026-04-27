@@ -7,6 +7,7 @@ import com.cadenasuministros.adapters.outbound.persistence.jpa.JpaAdapters;
 import com.cadenasuministros.adapters.outbound.persistence.jpa.SpringDataDeliveryReportRepository;
 import com.cadenasuministros.adapters.outbound.persistence.jpa.SpringDataSensorReadingRepository;
 import com.cadenasuministros.adapters.outbound.persistence.jpa.SpringDataShipmentRepository;
+import com.cadenasuministros.adapters.outbound.persistence.jpa.SpringDataProductRepository;
 import com.cadenasuministros.application.factory.*;
 import com.cadenasuministros.application.reporting.abstraction.DeliveryReportGenerator;
 import com.cadenasuministros.application.reporting.abstraction.DetailedDeliveryReportGenerator;
@@ -57,8 +58,9 @@ public class FactoryConfig {
     JpaAdapters jpaAdapters(
             SpringDataShipmentRepository shipmentRepo,
             SpringDataSensorReadingRepository sensorRepo,
-            SpringDataDeliveryReportRepository reportRepo) {  // ⭐ NUEVO
-        return new JpaAdapters(shipmentRepo, sensorRepo, reportRepo);
+            SpringDataDeliveryReportRepository reportRepo,
+            SpringDataProductRepository productRepo) {  
+        return new JpaAdapters(shipmentRepo, sensorRepo, reportRepo, productRepo);
     }
     
     @Bean
