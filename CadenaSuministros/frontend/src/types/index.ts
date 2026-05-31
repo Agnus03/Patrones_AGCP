@@ -242,3 +242,11 @@ export interface SortConfig<T> {
   key: keyof T;
   direction: SortDirection;
 }
+
+export interface Column<T> {
+  key: keyof T;
+  label: string;
+  sortable?: boolean;
+  align?: 'left' | 'right' | 'center';
+  render?: (value: unknown, item: T) => React.ReactNode;
+}

@@ -1,46 +1,38 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { qualityService } from '../api/qualityService';
 import { shipmentService } from '../api/shipmentService';
 import { PageHeader } from '../components/PageHeader';
-import type { QualityCheckpoint, Shipment } from '../types';
-import { useSort } from '../hooks/useSort';
+import type { QualityCheckpoint, Shipment, Column } from '../types';
+import { useDataFetch } from '../hooks/useDataFetch';
+import { DataView } from '../components/DataView';
+import { SortableTable } from '../components/SortableTable';
 import { LOCALE } from '../utils/constants';
 
 export function QualityControlPage() {
-  const [checkpoints, setCheckpoints] = useState<QualityCheckpoint[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'passed' | 'failed'>('all');
   const [showCreate, setShowCreate] = useState(false);
   const [selectedShipment, setSelectedShipment] = useState<string>('');
 
-  const { sorted, sortConfig, handleSort } = useSort<QualityCheckpoint>();
-
-  const fetchAll = useCallback(async () => {
-    try {
-      const [qc, sh] = await Promise.all([qualityService.listAll(), shipmentService.listAll()]);
-      setCheckpoints(qc);
-      setShipments(sh);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar controles de calidad');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const { data: checkpoints, loading, error, refresh } = useDataFetch(async () => {
+    const [qc, sh] = await Promise.all([qualityService.listAll(), shipmentService.listAll()]);
+    setShipments(sh);
+    return qc;
+  });
 
   const filtered = useMemo(() => {
+    if (!checkpoints) return [];
     let list = checkpoints;
     if (filter === 'passed') list = list.filter(c => c.passed);
     else if (filter === 'failed') list = list.filter(c => !c.passed);
     if (selectedShipment) list = list.filter(c => c.shipmentId === selectedShipment);
-    return sorted(list, sortConfig);
-  }, [checkpoints, filter, selectedShipment, sorted, sortConfig]);
+    return list;
+  }, [checkpoints, filter, selectedShipment]);
 
-  const failedCount = useMemo(() => checkpoints.filter(c => !c.passed).length, [checkpoints]);
+  const failedCount = useMemo(() =>
+    checkpoints ? checkpoints.filter(c => !c.passed).length : 0,
+    [checkpoints]
+  );
 
   const handleCreate = async (data: {
     shipmentId: string; location: string; temperatureC: number | null;
@@ -48,46 +40,32 @@ export function QualityControlPage() {
   }) => {
     await qualityService.create(data);
     setShowCreate(false);
-    fetchAll();
+    refresh();
   };
 
-  const renderSortIcon = (key: keyof QualityCheckpoint) => {
-    if (sortConfig.key !== key) return <span className="sort-icon">↕</span>;
-    return <span className="sort-icon active">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
-  };
-
-  if (loading) {
-    return (
-      <div>
-        <PageHeader title="Control de Calidad" subtitle="Puntos de inspección y checklists de envíos" />
-        <div className="card"><div className="skeleton" style={{ height: 400 }} /></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div>
-        <PageHeader title="Control de Calidad" subtitle="Puntos de inspección y checklists de envíos" />
-        <div className="card"><p style={{ color: 'var(--danger)' }}>Error: {error}</p>
-          <button className="btn btn-primary" onClick={fetchAll}>Reintentar</button>
-        </div>
-      </div>
-    );
-  }
+  const columns: Column<QualityCheckpoint>[] = [
+    { key: 'shipmentId', label: 'Envío', sortable: true, render: (v) => <span className="font-mono text-sm">{(v as string).slice(0, 8)}</span> },
+    { key: 'location', label: 'Ubicación', sortable: true },
+    { key: 'temperatureC', label: 'Temp', sortable: true, align: 'right', render: (v) => v != null ? `${v}°C` : <span>-</span> },
+    { key: 'humidityPct', label: 'Humedad', sortable: true, align: 'right', render: (v) => v != null ? `${v}%` : <span>-</span> },
+    { key: 'passed', label: 'Resultado', sortable: true, align: 'center', render: (v) => v ? <span className="badge badge-delivered">Aprobado</span> : <span className="badge badge-delayed">Rechazado</span> },
+    { key: 'inspector', label: 'Inspector', render: (v) => { const s = v as string | null; return s ?? <span>-</span>; } },
+    { key: 'notes', label: 'Notas', render: (v) => <span className="text-sm">{String(v ?? '-')}</span> },
+    { key: 'timestamp', label: 'Fecha', render: (v) => <span className="text-xs text-secondary">{new Date(v as string).toLocaleString(LOCALE)}</span> },
+  ];
 
   return (
     <div>
       <PageHeader title="Control de Calidad" subtitle="Puntos de inspección y checklists de envíos">
         <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>+ Nuevo Control</button>
-        <button className="btn btn-outline btn-sm" onClick={fetchAll}>Actualizar</button>
+        <button className="btn btn-outline btn-sm" onClick={refresh}>Actualizar</button>
       </PageHeader>
 
       <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-        <div className="card"><div className="card-header"><span className="card-title">Total Inspecciones</span></div><p className="text-2xl font-bold">{checkpoints.length}</p></div>
-        <div className="card"><div className="card-header"><span className="card-title">Aprobados</span></div><p className="text-2xl font-bold text-success">{checkpoints.filter(c => c.passed).length}</p></div>
+        <div className="card"><div className="card-header"><span className="card-title">Total Inspecciones</span></div><p className="text-2xl font-bold">{checkpoints?.length ?? 0}</p></div>
+        <div className="card"><div className="card-header"><span className="card-title">Aprobados</span></div><p className="text-2xl font-bold text-success">{checkpoints ? checkpoints.filter(c => c.passed).length : 0}</p></div>
         <div className="card"><div className="card-header"><span className="card-title">Rechazados</span></div><p className={`text-2xl font-bold ${failedCount > 0 ? 'text-danger' : ''}`}>{failedCount}</p></div>
-        <div className="card"><div className="card-header"><span className="card-title">Tasa de Éxito</span></div><p className="text-2xl font-bold">{checkpoints.length > 0 ? Math.round((checkpoints.filter(c => c.passed).length / checkpoints.length) * 100) : 0}%</p></div>
+        <div className="card"><div className="card-header"><span className="card-title">Tasa de Éxito</span></div><p className="text-2xl font-bold">{checkpoints && checkpoints.length > 0 ? Math.round((checkpoints.filter(c => c.passed).length / checkpoints.length) * 100) : 0}%</p></div>
       </div>
 
       <div className="card">
@@ -107,39 +85,21 @@ export function QualityControlPage() {
             </div>
           </div>
         </div>
-        <div className="overflow-auto">
-          <table className="table-enhanced">
-            <thead>
-              <tr>
-                <th onClick={() => handleSort('shipmentId')} style={{ cursor: 'pointer' }}>Envío {renderSortIcon('shipmentId')}</th>
-                <th onClick={() => handleSort('location')} style={{ cursor: 'pointer' }}>Ubicación {renderSortIcon('location')}</th>
-                <th onClick={() => handleSort('temperatureC')} style={{ cursor: 'pointer', textAlign: 'right' }}>Temp {renderSortIcon('temperatureC')}</th>
-                <th onClick={() => handleSort('humidityPct')} style={{ cursor: 'pointer', textAlign: 'right' }}>Humedad {renderSortIcon('humidityPct')}</th>
-                <th onClick={() => handleSort('passed')} style={{ cursor: 'pointer', textAlign: 'center' }}>Resultado {renderSortIcon('passed')}</th>
-                <th>Inspector</th>
-                <th>Notas</th>
-                <th>Fecha</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={8} className="empty-state-sm">Sin inspecciones</td></tr>
-              ) : filtered.map(cp => (
-                  <tr key={cp.id} className="row-enter">
-                    <td className="font-mono text-sm">{cp.shipmentId.slice(0, 8)}</td>
-                    <td>{cp.location}</td>
-                    <td style={{ textAlign: 'right' }}>{cp.temperatureC != null ? `${cp.temperatureC}°C` : '-'}</td>
-                    <td style={{ textAlign: 'right' }}>{cp.humidityPct != null ? `${cp.humidityPct}%` : '-'}</td>
-                    <td style={{ textAlign: 'center' }}>{cp.passed ? <span className="badge badge-delivered">Aprobado</span> : <span className="badge badge-delayed">Rechazado</span>}</td>
-                    <td>{cp.inspector ?? '-'}</td>
-                    <td className="text-sm">{cp.notes ?? '-'}</td>
-                    <td className="text-xs text-secondary">{new Date(cp.timestamp).toLocaleString(LOCALE)}</td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        </div>
+
+        <DataView
+          loading={loading}
+          error={error}
+          data={checkpoints}
+          onRetry={refresh}
+        >
+          {() => (
+            <SortableTable<QualityCheckpoint>
+              data={filtered}
+              columns={columns}
+              defaultSort="timestamp"
+            />
+          )}
+        </DataView>
       </div>
 
       {showCreate && (
