@@ -1,16 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { inventoryService } from '../api/inventoryService';
 import { productService } from '../api/productService';
 import { PageHeader } from '../components/PageHeader';
-import type { InventoryItem, StockMovement, Product } from '../types';
-import { useSort } from '../hooks/useSort';
+import type { InventoryItem, StockMovement, Product, Column } from '../types';
+import { useDataFetch } from '../hooks/useDataFetch';
+import { DataView } from '../components/DataView';
+import { SortableTable } from '../components/SortableTable';
 import { LOCALE } from '../utils/constants';
 
 export function InventoryPage() {
-  const [items, setItems] = useState<InventoryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [showLowStock, setShowLowStock] = useState(false);
@@ -19,22 +18,11 @@ export function InventoryPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [showMovements, setShowMovements] = useState(false);
 
-  const { sorted, sortConfig, handleSort } = useSort<InventoryItem>();
-
-  const fetchAll = useCallback(async () => {
-    try {
-      const [inv, prods] = await Promise.all([inventoryService.listAll(), productService.listAll()]);
-      setItems(inv);
-      setProducts(prods);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cargar inventario');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const { data: items, loading, error, refresh } = useDataFetch(async () => {
+    const [inv, prods] = await Promise.all([inventoryService.listAll(), productService.listAll()]);
+    setProducts(prods);
+    return inv;
+  });
 
   const productMap = useMemo(() => {
     const m = new Map<string, Product>();
@@ -43,6 +31,7 @@ export function InventoryPage() {
   }, [products]);
 
   const filtered = useMemo(() => {
+    if (!items) return [];
     let list = items;
     if (search) {
       const q = search.toLowerCase();
@@ -53,21 +42,21 @@ export function InventoryPage() {
     }
     if (warehouseFilter) list = list.filter(i => i.warehouse === warehouseFilter);
     if (showLowStock) list = list.filter(i => i.quantity < i.minStock);
-    return sorted(list, sortConfig);
-  }, [items, search, warehouseFilter, showLowStock, productMap, sorted, sortConfig]);
+    return list;
+  }, [items, search, warehouseFilter, showLowStock, productMap]);
 
-  const warehouses = useMemo(() => [...new Set(items.map(i => i.warehouse))], [items]);
-  const lowStockCount = useMemo(() => items.filter(i => i.quantity < i.minStock).length, [items]);
+  const warehouses = useMemo(() => items ? [...new Set(items.map(i => i.warehouse))] : [], [items]);
+  const lowStockCount = useMemo(() => items ? items.filter(i => i.quantity < i.minStock).length : 0, [items]);
 
   const handleCreate = async (data: { productId: string; quantity: number; minStock: number; warehouse: string }) => {
     await inventoryService.create(data);
     setShowCreate(false);
-    fetchAll();
+    refresh();
   };
 
   const handleQuantityChange = async (id: string, delta: number, type: string, reference?: string, notes?: string) => {
     await inventoryService.adjustQuantity(id, delta, type, reference, notes);
-    fetchAll();
+    refresh();
   };
 
   const viewMovements = async (item: InventoryItem) => {
@@ -82,101 +71,89 @@ export function InventoryPage() {
     }
   };
 
-  const renderSortIcon = (key: keyof InventoryItem) => {
-    if (sortConfig.key !== key) return <span className="sort-icon">↕</span>;
-    return <span className="sort-icon active">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>;
-  };
-
-  if (loading) {
-    return (
-      <div>
-        <PageHeader title="Inventario" subtitle="Gestión de stock y movimientos de productos" />
-        <div className="card"><div className="skeleton" style={{ height: 400 }} /></div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div>
-        <PageHeader title="Inventario" subtitle="Gestión de stock y movimientos de productos" />
-        <div className="card"><p style={{ color: 'var(--danger)' }}>Error: {error}</p>
-          <button className="btn btn-primary" onClick={fetchAll}>Reintentar</button>
+  const columns: Column<InventoryItem>[] = [
+    { key: 'productId', label: 'Producto', sortable: true, render: (v) => {
+      const prod = productMap.get(v as string);
+      return (
+        <>
+          <span className="font-medium">{prod?.name ?? (v as string).slice(0, 8)}</span>
+          <br /><span className="text-xs text-secondary">{prod?.sku ?? ''}</span>
+        </>
+      );
+    }},
+    { key: 'warehouse', label: 'Bodega', sortable: true },
+    { key: 'quantity', label: 'Cantidad', sortable: true, align: 'right', render: (v, item) => {
+      const isLow = item.quantity < item.minStock;
+      return <span className={isLow ? 'text-danger font-bold' : ''}>{v as number}</span>;
+    }},
+    { key: 'minStock', label: 'Stock Mín.', sortable: true, align: 'right' },
+    {
+      key: 'quantity' as keyof InventoryItem, label: 'Estado', align: 'center',
+      render: (_v, item) =>
+        item.quantity < item.minStock
+          ? <span className="badge badge-delayed">Bajo</span>
+          : <span className="badge badge-delivered">OK</span>
+    },
+    { key: 'lastUpdated', label: 'Actualizado', render: (v) =>
+      <span className="text-xs text-secondary">{new Date(v as string).toLocaleString(LOCALE)}</span>
+    },
+    {
+      key: 'id' as keyof InventoryItem, label: 'Acciones', align: 'center',
+      render: (_v, item) => (
+        <div className="btn-group" style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
+          <button className="btn btn-sm btn-outline" onClick={() => handleQuantityChange(item.id, 1, 'INBOUND', 'manual', 'Ajuste manual')} title="Incrementar">+1</button>
+          <button className="btn btn-sm btn-outline" disabled={item.quantity <= 0} onClick={() => handleQuantityChange(item.id, -1, 'OUTBOUND', 'manual', 'Ajuste manual')} title="Decrementar">-1</button>
+          <button className="btn btn-sm btn-outline" onClick={() => viewMovements(item)} title="Ver movimientos">📋</button>
         </div>
-      </div>
-    );
-  }
+      )
+    },
+  ];
 
   return (
     <div>
       <PageHeader title="Inventario" subtitle="Gestión de stock y movimientos de productos">
         <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(true)}>+ Nuevo Item</button>
-        <button className="btn btn-outline btn-sm" onClick={fetchAll}>Actualizar</button>
+        <button className="btn btn-outline btn-sm" onClick={refresh}>Actualizar</button>
       </PageHeader>
 
-      <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-        <div className="card"><div className="card-header"><span className="card-title">Total Items</span></div><p className="text-2xl font-bold">{items.length}</p></div>
-        <div className="card"><div className="card-header"><span className="card-title">Stock Bajo</span></div><p className={`text-2xl font-bold ${lowStockCount > 0 ? 'text-danger' : ''}`}>{lowStockCount}</p></div>
-        <div className="card"><div className="card-header"><span className="card-title">Bodegas</span></div><p className="text-2xl font-bold">{warehouses.length}</p></div>
-        <div className="card"><div className="card-header"><span className="card-title">Productos</span></div><p className="text-2xl font-bold">{items.length}</p></div>
-      </div>
+      <DataView loading={loading} error={error} data={items} onRetry={refresh}>
+        {(itemData) => (
+          <>
+            <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+              <div className="card"><div className="card-header"><span className="card-title">Total Items</span></div><p className="text-2xl font-bold">{itemData.length}</p></div>
+              <div className="card"><div className="card-header"><span className="card-title">Stock Bajo</span></div><p className={`text-2xl font-bold ${lowStockCount > 0 ? 'text-danger' : ''}`}>{lowStockCount}</p></div>
+              <div className="card"><div className="card-header"><span className="card-title">Bodegas</span></div><p className="text-2xl font-bold">{warehouses.length}</p></div>
+              <div className="card"><div className="card-header"><span className="card-title">Productos</span></div><p className="text-2xl font-bold">{itemData.length}</p></div>
+            </div>
 
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">Inventario</span>
-          <div className="search-bar" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="text" placeholder="Buscar producto o bodega..." value={search} onChange={e => setSearch(e.target.value)} className="form-input" style={{ width: 200 }} />
-            <select value={warehouseFilter} onChange={e => setWarehouseFilter(e.target.value)} className="form-input" style={{ width: 150 }}>
-              <option value="">Todas las bodegas</option>
-              {warehouses.map(w => <option key={w} value={w}>{w}</option>)}
-            </select>
-            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
-              <input type="checkbox" checked={showLowStock} onChange={e => setShowLowStock(e.target.checked)} />
-              Solo stock bajo
-            </label>
-          </div>
-        </div>
-        <div className="overflow-auto">
-          <table className="table-enhanced">
-            <thead>
-              <tr>
-                <th onClick={() => handleSort('productId')} style={{ cursor: 'pointer' }}>Producto {renderSortIcon('productId')}</th>
-                <th onClick={() => handleSort('warehouse')} style={{ cursor: 'pointer' }}>Bodega {renderSortIcon('warehouse')}</th>
-                <th onClick={() => handleSort('quantity')} style={{ cursor: 'pointer', textAlign: 'right' }}>Cantidad {renderSortIcon('quantity')}</th>
-                <th onClick={() => handleSort('minStock')} style={{ cursor: 'pointer', textAlign: 'right' }}>Stock Mín. {renderSortIcon('minStock')}</th>
-                <th style={{ textAlign: 'center' }}>Estado</th>
-                <th>Actualizado</th>
-                <th style={{ textAlign: 'center' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr><td colSpan={7} className="empty-state-sm">Sin resultados</td></tr>
-              ) : filtered.map(item => {
-                const prod = productMap.get(item.productId);
-                const isLow = item.quantity < item.minStock;
-                return (
-                  <tr key={item.id} className="row-enter">
-                    <td><span className="font-medium">{prod?.name ?? item.productId.slice(0, 8)}</span><br /><span className="text-xs text-secondary">{prod?.sku ?? ''}</span></td>
-                    <td>{item.warehouse}</td>
-                    <td style={{ textAlign: 'right' }}><span className={isLow ? 'text-danger font-bold' : ''}>{item.quantity}</span></td>
-                    <td style={{ textAlign: 'right' }}>{item.minStock}</td>
-                    <td style={{ textAlign: 'center' }}>{isLow ? <span className="badge badge-delayed">Bajo</span> : <span className="badge badge-delivered">OK</span>}</td>
-                    <td className="text-xs text-secondary">{new Date(item.lastUpdated).toLocaleString(LOCALE)}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <div className="btn-group" style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
-                        <button className="btn btn-sm btn-outline" onClick={() => handleQuantityChange(item.id, 1, 'INBOUND', 'manual', 'Ajuste manual')} title="Incrementar">+1</button>
-                        <button className="btn btn-sm btn-outline" disabled={item.quantity <= 0} onClick={() => handleQuantityChange(item.id, -1, 'OUTBOUND', 'manual', 'Ajuste manual')} title="Decrementar">-1</button>
-                        <button className="btn btn-sm btn-outline" onClick={() => viewMovements(item)} title="Ver movimientos">📋</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Inventario</span>
+                <div className="search-bar" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="text" placeholder="Buscar producto o bodega..." value={search} onChange={e => setSearch(e.target.value)} className="form-input" style={{ width: 200 }} />
+                  <select value={warehouseFilter} onChange={e => setWarehouseFilter(e.target.value)} className="form-input" style={{ width: 150 }}>
+                    <option value="">Todas las bodegas</option>
+                    {warehouses.map(w => <option key={w} value={w}>{w}</option>)}
+                  </select>
+                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={showLowStock} onChange={e => setShowLowStock(e.target.checked)} />
+                    Solo stock bajo
+                  </label>
+                </div>
+              </div>
+
+              <SortableTable<InventoryItem>
+                data={filtered}
+                columns={columns}
+                defaultSort="quantity"
+                emptyState={
+                  <tr><td colSpan={7} className="empty-state-sm">Sin resultados</td></tr>
+                }
+              />
+            </div>
+          </>
+        )}
+      </DataView>
 
       {showCreate && (
         <CreateInventoryForm products={products} onSubmit={handleCreate} onClose={() => setShowCreate(false)} />

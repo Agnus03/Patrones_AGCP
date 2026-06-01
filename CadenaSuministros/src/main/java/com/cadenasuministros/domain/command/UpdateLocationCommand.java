@@ -9,18 +9,11 @@ import com.cadenasuministros.domain.port.out.ShipmentRepository;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
-public class UpdateLocationCommand implements ShipmentCommand {
+public class UpdateLocationCommand extends AbstractShipmentCommand {
 
-    private final ShipmentRepository shipmentRepository;
-    private final ShipmentEventRepository eventRepository;
-    private final ApplicationEventPublisher eventPublisher;
-    private final UUID shipmentId;
     private final String newLocation;
-
-    private Shipment previousState;
 
     public UpdateLocationCommand(
             ShipmentRepository shipmentRepository,
@@ -28,55 +21,56 @@ public class UpdateLocationCommand implements ShipmentCommand {
             ApplicationEventPublisher eventPublisher,
             UUID shipmentId,
             String newLocation) {
-        this.shipmentRepository = shipmentRepository;
-        this.eventRepository = eventRepository;
-        this.eventPublisher = eventPublisher;
-        this.shipmentId = shipmentId;
+        super(shipmentRepository, eventRepository, eventPublisher, shipmentId);
         this.newLocation = newLocation;
     }
 
     @Override
-    public Shipment execute() {
-        Shipment current = shipmentRepository.findShipmentById(shipmentId)
-                .orElseThrow(() -> new IllegalArgumentException("Shipment not found: " + shipmentId));
-        if (current.currentLocation().equals(newLocation)) return current;
-
-        this.previousState = current;
-
-        Shipment updated = current.withLocation(newLocation);
-        Shipment saved = shipmentRepository.save(updated);
-
-        eventRepository.save(new ShipmentEvent(
-                UUID.randomUUID(),
-                shipmentId,
-                current.status(),
-                saved.status(),
-                current.currentLocation(),
-                newLocation,
-                Instant.now()
-        ));
-
-        eventPublisher.publishEvent(new ShipmentLocationChangedEvent(
-                shipmentId, current.currentLocation(), newLocation));
-        return saved;
+    protected boolean isNoOp(Shipment current) {
+        return current.currentLocation().equals(newLocation);
     }
 
     @Override
-    public Optional<Shipment> undo() {
-        if (previousState == null) return Optional.empty();
-        Shipment restored = shipmentRepository.save(previousState);
-        eventRepository.save(new ShipmentEvent(
+    protected Shipment doExecute(Shipment current) {
+        return current.withLocation(newLocation);
+    }
+
+    @Override
+    protected ShipmentEvent buildEvent(Shipment before, Shipment after) {
+        return new ShipmentEvent(
                 UUID.randomUUID(),
                 shipmentId,
-                previousState.status(),
-                previousState.status(),
-                newLocation,
-                previousState.currentLocation(),
+                before.status(),
+                after.status(),
+                before.currentLocation(),
+                after.currentLocation(),
                 Instant.now()
-        ));
+        );
+    }
+
+    @Override
+    protected void publishEvent(Shipment before, Shipment after) {
         eventPublisher.publishEvent(new ShipmentLocationChangedEvent(
-                shipmentId, newLocation, previousState.currentLocation()));
-        return Optional.of(restored);
+                shipmentId, before.currentLocation(), after.currentLocation()));
+    }
+
+    @Override
+    protected ShipmentEvent buildUndoEvent(Shipment restored) {
+        return new ShipmentEvent(
+                UUID.randomUUID(),
+                shipmentId,
+                restored.status(),
+                restored.status(),
+                newLocation,
+                restored.currentLocation(),
+                Instant.now()
+        );
+    }
+
+    @Override
+    protected void publishUndoEvent(Shipment before, Shipment restored) {
+        eventPublisher.publishEvent(new ShipmentLocationChangedEvent(
+                shipmentId, newLocation, before.currentLocation()));
     }
 
     @Override
@@ -84,8 +78,4 @@ public class UpdateLocationCommand implements ShipmentCommand {
         return "UpdateLocation: " + shipmentId + " \u2192 " + newLocation;
     }
 
-    @Override
-    public UUID getShipmentId() {
-        return shipmentId;
-    }
 }

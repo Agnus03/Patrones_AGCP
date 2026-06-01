@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { SortConfig, SortDirection } from '../types';
 
-export function useSort<T extends Record<string, any>>(defaultKey?: keyof T) {
+export function useSort<T>(defaultKey?: keyof T) {
   const [sortConfig, setSortConfig] = useState<SortConfig<T>>({
     key: (defaultKey ?? '') as unknown as keyof T,
     direction: 'asc' as SortDirection,

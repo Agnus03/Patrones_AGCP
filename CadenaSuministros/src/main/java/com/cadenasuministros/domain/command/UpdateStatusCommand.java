@@ -9,18 +9,11 @@ import com.cadenasuministros.domain.port.out.ShipmentRepository;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
-public class UpdateStatusCommand implements ShipmentCommand {
+public class UpdateStatusCommand extends AbstractShipmentCommand {
 
-    private final ShipmentRepository shipmentRepository;
-    private final ShipmentEventRepository eventRepository;
-    private final ApplicationEventPublisher eventPublisher;
-    private final UUID shipmentId;
     private final String newStatus;
-
-    private Shipment previousState;
 
     public UpdateStatusCommand(
             ShipmentRepository shipmentRepository,
@@ -28,59 +21,62 @@ public class UpdateStatusCommand implements ShipmentCommand {
             ApplicationEventPublisher eventPublisher,
             UUID shipmentId,
             String newStatus) {
-        this.shipmentRepository = shipmentRepository;
-        this.eventRepository = eventRepository;
-        this.eventPublisher = eventPublisher;
-        this.shipmentId = shipmentId;
+        super(shipmentRepository, eventRepository, eventPublisher, shipmentId);
         this.newStatus = newStatus;
     }
 
     @Override
-    public Shipment execute() {
-        Shipment current = shipmentRepository.findShipmentById(shipmentId)
-                .orElseThrow(() -> new IllegalArgumentException("Shipment not found: " + shipmentId));
-        if (current.status().equals(newStatus)) {
-            eventPublisher.publishEvent(new ShipmentStatusChangedEvent(
-                    shipmentId, current.status(), newStatus));
-            return current;
-        }
-
-        this.previousState = current;
-
-        Shipment updated = current.withStatus(newStatus);
-        Shipment saved = shipmentRepository.save(updated);
-
-        eventRepository.save(new ShipmentEvent(
-                UUID.randomUUID(),
-                shipmentId,
-                current.status(),
-                newStatus,
-                current.currentLocation(),
-                saved.currentLocation(),
-                Instant.now()
-        ));
-
-        eventPublisher.publishEvent(new ShipmentStatusChangedEvent(
-                shipmentId, current.status(), newStatus));
-        return saved;
+    protected boolean isNoOp(Shipment current) {
+        return current.status().equals(newStatus);
     }
 
     @Override
-    public Optional<Shipment> undo() {
-        if (previousState == null) return Optional.empty();
-        Shipment restored = shipmentRepository.save(previousState);
-        eventRepository.save(new ShipmentEvent(
+    protected void handleNoOp(Shipment current) {
+        eventPublisher.publishEvent(new ShipmentStatusChangedEvent(
+                shipmentId, current.status(), newStatus));
+    }
+
+    @Override
+    protected Shipment doExecute(Shipment current) {
+        return current.withStatus(newStatus);
+    }
+
+    @Override
+    protected ShipmentEvent buildEvent(Shipment before, Shipment after) {
+        return new ShipmentEvent(
+                UUID.randomUUID(),
+                shipmentId,
+                before.status(),
+                after.status(),
+                before.currentLocation(),
+                after.currentLocation(),
+                Instant.now()
+        );
+    }
+
+    @Override
+    protected void publishEvent(Shipment before, Shipment after) {
+        eventPublisher.publishEvent(new ShipmentStatusChangedEvent(
+                shipmentId, before.status(), after.status()));
+    }
+
+    @Override
+    protected ShipmentEvent buildUndoEvent(Shipment restored) {
+        return new ShipmentEvent(
                 UUID.randomUUID(),
                 shipmentId,
                 newStatus,
-                previousState.status(),
-                previousState.currentLocation(),
-                previousState.currentLocation(),
+                restored.status(),
+                restored.currentLocation(),
+                restored.currentLocation(),
                 Instant.now()
-        ));
+        );
+    }
+
+    @Override
+    protected void publishUndoEvent(Shipment before, Shipment restored) {
         eventPublisher.publishEvent(new ShipmentStatusChangedEvent(
-                shipmentId, newStatus, previousState.status()));
-        return Optional.of(restored);
+                shipmentId, newStatus, before.status()));
     }
 
     @Override
@@ -88,8 +84,4 @@ public class UpdateStatusCommand implements ShipmentCommand {
         return "UpdateStatus: " + shipmentId + " \u2192 " + newStatus;
     }
 
-    @Override
-    public UUID getShipmentId() {
-        return shipmentId;
-    }
 }

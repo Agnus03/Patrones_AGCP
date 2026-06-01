@@ -84,4 +84,5 @@ public class CreateShipmentCommand implements ShipmentCommand {
     public UUID getShipmentId() {
         return shipmentId;
     }
+
 }
